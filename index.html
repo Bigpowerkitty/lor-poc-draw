@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  
+  <title>LoR · Path of Champions 双英雄池抽签器</title>
+  <style>
+    body {
+      
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", Arial;
+  margin: 0;
+  color: #e8eef7;
+  position: relative;
+  min-height: 100vh;
+  background: transparent;
+  
+}
+
+/* 背景图层 */
+/* 背景层（100% 稳定） */
+.bg {
+  position: fixed;
+  inset: 0;
+  background-image: url("poro_bg.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.8;           /* 80% 不透明度 */
+  z-index: 0;
+}
+
+/* 内容层 */
+.wrap {
+  position: relative;
+  z-index: 1;
+}
+
+
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; position: relative; z-index: 1;}
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; margin: 0 0 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card {
+  background: rgba(18, 24, 38, 0.85); /* 半透明卡片 */
+  border: 1px solid #243047;
+  border-radius: 14px;
+  padding: 16px;
+}
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button, input {
+      background:#182338; color:#e8eef7;
+      border:1px solid #2a3a57; border-radius:12px;
+      padding:10px 14px; font-size:14px;
+    }
+    button.primary { background:#2b5cff; border-color:#2b5cff; }
+    button.warn { background:#5c2b2b; border-color:#7a3a3a; }
+    button:hover { background:#1f2e4a; cursor:pointer; }
+    .out {
+      background:#0e1420; border:1px solid #2a3a57;
+      border-radius:12px; padding:14px; font-size:18px;
+      min-height:48px;
+    }
+    .meta { font-size:12px; color:#a9b7d0; margin-top:6px; }
+    .hist {
+      margin-top:10px; max-height:200px; overflow:auto;
+      background:#0e1420; border:1px solid #2a3a57;
+      border-radius:12px; padding:10px; font-size:13px;
+    }
+    .hist div { padding:6px 0; border-bottom:1px dashed #22304a; }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="wrap">
+  <h1>LoR · Path of Champions 双英雄池随机抽签器</h1>
+
+  <div class="grid">
+
+    <!-- ================= T0 池 ================= -->
+    <div class="card">
+      <h2>🔥 T0 英雄池</h2>
+
+      <div class="row">
+        <button class="primary" onclick="drawOne('t0')">抽 1 个</button>
+        <button class="primary" onclick="drawN('t0')">抽 N 个</button>
+        <input type="number" id="t0_n" value="3" min="1" style="width:80px">
+        <button class="warn" onclick="resetPool('t0')">重置</button>
+      </div>
+
+      <div style="height:10px"></div>
+      <div class="out" id="t0_out">等待抽签</div>
+      <div class="meta">剩余：<b id="t0_count"></b></div>
+      <div class="hist" id="t0_hist"></div>
+    </div>
+
+    <!-- ================= 普通池 ================= -->
+    <div class="card">
+      <h2>⚔️ 普通英雄池</h2>
+
+      <div class="row">
+        <button class="primary" onclick="drawOne('normal')">抽 1 个</button>
+        <button class="primary" onclick="drawN('normal')">抽 N 个</button>
+        <input type="number" id="normal_n" value="3" min="1" style="width:80px">
+        <button class="warn" onclick="resetPool('normal')">重置</button>
+      </div>
+
+      <div style="height:10px"></div>
+      <div class="out" id="normal_out">等待抽签</div>
+      <div class="meta">剩余：<b id="normal_count"></b></div>
+      <div class="hist" id="normal_hist"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ================= 英雄池定义 ================= */
+
+const T0_FULL = [
+ "Elise","Fiddlesticks","Jhin","Kai'Sa","Heimerdinger","Elder Dragon",
+ "Lux: Illuminated","Miss Fortune","Morgana","Lux","Norra","Viktor",
+ "Yasuo","Spirit Blossom Teemo","Swain"
+];
+
+const NORMAL_FULL = [
+ "Aatrox","Ahri","Annie","Ashe","Ambessa","Anivia","Akshan","Azir",
+ "Caitlyn","Darius","Ekko","Evelynn","Gwen","Jayce","Jinx","Kayle",
+ "Leona","Lillia","Mel","Nasus","Nautilus","Neeko","Pyke","Samira",
+ "Sett","Shyvana","Taliyah","The Poro King","Thresh","Tryndamere",
+ "Twisted Fate","Vayne","Vex","Vi","Viego","Volibear","Warwick","Yuumi"
+];
+
+let pools = {
+  t0: [...T0_FULL],
+  normal: [...NORMAL_FULL]
+};
+
+/* ================= 工具函数 ================= */
+
+function rand(max) {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] % max;
+}
+
+function updateCount(type) {
+  document.getElementById(type + "_count").textContent = pools[type].length;
+}
+
+function log(type, text) {
+  const div = document.createElement("div");
+  div.textContent = `${new Date().toLocaleTimeString()} → ${text}`;
+  document.getElementById(type + "_hist").prepend(div);
+}
+
+/* ================= 抽签逻辑 ================= */
+
+function drawOne(type) {
+  if (pools[type].length === 0) resetPool(type);
+  const i = rand(pools[type].length);
+  const pick = pools[type].splice(i, 1)[0];
+  document.getElementById(type + "_out").textContent = pick;
+  log(type, pick);
+  updateCount(type);
+}
+
+function drawN(type) {
+  let n = parseInt(document.getElementById(type + "_n").value || 1);
+  if (n > pools[type].length) n = pools[type].length;
+  const picks = [];
+  for (let i = 0; i < n; i++) {
+    const idx = rand(pools[type].length);
+    picks.push(pools[type].splice(idx, 1)[0]);
+  }
+  const text = picks.join("、");
+  document.getElementById(type + "_out").textContent = text;
+  log(type, text);
+  updateCount(type);
+}
+
+function resetPool(type) {
+  pools[type] = type === "t0" ? [...T0_FULL] : [...NORMAL_FULL];
+  document.getElementById(type + "_out").textContent = "已重置";
+  log(type, "重置英雄池");
+  updateCount(type);
+}
+
+/* ================= 初始化 ================= */
+
+updateCount("t0");
+updateCount("normal");
+</script>
+
+</body>
+</html>
